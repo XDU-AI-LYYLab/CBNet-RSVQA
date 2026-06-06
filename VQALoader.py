@@ -9,12 +9,8 @@ import numpy as np
 import random
 import torchvision.transforms as transforms
 from torchvision.transforms import Compose, RandomHorizontalFlip
-
-# ✨✨✨ 请确保这里正确导入了您下载的 AutoAugment 类 ✨✨✨
-# 如果 auto_augment.py 在 augment 文件夹下：
 from .auto_augment import AutoAugment
-# 如果 auto_augment.py 和 VQALoader.py 在同一个文件夹下，请改为：
-# from .auto_augment import AutoAugment 
+
 
 class VQALoader(Dataset):
     """
@@ -147,14 +143,14 @@ class VQALoader(Dataset):
                     else:
                         self.non_selected_answers.append(key[0])
                     total_answers += key[1]
-        # if we are not in training
+
         else:
             self.selected_answers = selected_answers
 
-        # list for storing the image-question-answer pairs
+
         self.images_questions_answers = []
 
-        # we go through all img ids
+
         for i, image in enumerate(tqdm(images)):
             for questionid in imagesJSON["images"][image]["questions_ids"]:
                 question = questionsJSON["questions"][questionid]
@@ -162,7 +158,6 @@ class VQALoader(Dataset):
                 type_str = question["type"]
                 answer_str = answersJSON["answers"][question["answers_ids"][0]]["answer"]
 
-                # group the counting answers (Same logic as above)
                 if self.Dataset == "LR":
                     if answer_str.isdigit():
                         num = int(answer_str)
@@ -200,11 +195,8 @@ class VQALoader(Dataset):
 
         print("Done.")
 
-        # ✨✨✨ 核心修改：初始化 AutoAugment ✨✨✨
-        # 只在训练模式下初始化，验证/测试模式下不需要
         if self.train:
             self.auto_augment = AutoAugment()
-            # 训练时的增强组合： AutoAugment
             self.train_transform = self.auto_augment  # 原有的 AutoAugment
             print("✅ VQALoader: 启用 AutoAugment 数据增强 (SOTA 策略)")
         
@@ -216,8 +208,6 @@ class VQALoader(Dataset):
         data = self.images_questions_answers[idx]
         question_text = data[0]
 
-        # 2. ✨ 新增：判断问题是否与空间方位相关
-        #     #    (这需要您在 __init__ 中定义 self.spatial_keywords)
         is_spatial_question = any(
             keyword in question_text for keyword in self.spatial_keywords
         )
@@ -229,24 +219,17 @@ class VQALoader(Dataset):
             max_length=self.sequence_length,
         )
         
-        # 加载图像
         img_path = self.image_paths[data[2]]
         img = io.imread(img_path) 
         
-        # ✨✨✨ 核心修改：应用 AutoAugment ✨✨✨
-        # 1. 转换为 PIL Image (AutoAugment 需要 PIL 格式，Processor 也支持 PIL)
         img_pil = Image.fromarray(img)
 
         if self.train:
-            # 50% 概率进行垂直翻转
             if random.random() < 0.55:
                 img_pil = img_pil.transpose(Image.FLIP_TOP_BOTTOM)
-            # 50% 概率进行水平翻转
             if random.random() < 0.55:
                 img_pil = img_pil.transpose(Image.FLIP_LEFT_RIGHT)
-            # 50% 概率进行随机90度整数倍旋转
             if random.random() < 0.5:  
-                # 随机选择旋转角度对应的 PIL 常量  
                 rot_method = random.choice([
                     Image.ROTATE_90, 
                     Image.ROTATE_180, 
@@ -255,10 +238,8 @@ class VQALoader(Dataset):
                 img_pil = img_pil.transpose(rot_method)
             img_pil = self.train_transform(img_pil)
 
-        # 3. 转换为 Tensor 并归一化 (使用 HuggingFace processor)
         imgT = self.image_processor(img_pil, return_tensors="pt")
         
-        # ✨✨✨ 修改结束 ✨✨✨
 
         if self.train:
             token_type_ids = torch.zeros_like(language_feats["input_ids"][0])
